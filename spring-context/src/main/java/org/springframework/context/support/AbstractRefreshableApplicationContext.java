@@ -16,13 +16,13 @@
 
 package org.springframework.context.support;
 
-import java.io.IOException;
-
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextException;
+
+import java.io.IOException;
 
 /**
  * Base class for {@link org.springframework.context.ApplicationContext}
@@ -118,14 +118,19 @@ public abstract class AbstractRefreshableApplicationContext extends AbstractAppl
 	 */
 	@Override
 	protected final void refreshBeanFactory() throws BeansException {
+		//如果原来已经存在了beanFactory，那么先销毁掉
 		if (hasBeanFactory()) {
 			destroyBeans();
 			closeBeanFactory();
 		}
 		try {
+			// 手动创建一个DefaultListableBeanFactory
+			// 当前类也是BeanFactory的子类，但是实际实现都是委托给这个beanFactory来处理的
 			DefaultListableBeanFactory beanFactory = createBeanFactory();
 			beanFactory.setSerializationId(getId());
+			//设置beanFactory的两个参数————是否允许Bean覆盖和是否允许循环依赖
 			customizeBeanFactory(beanFactory);
+			//**加载BeanDefinition,由子类实现，有不同的加载方式，如从XML中、注解配置中获取等等
 			loadBeanDefinitions(beanFactory);
 			synchronized (this.beanFactoryMonitor) {
 				this.beanFactory = beanFactory;
