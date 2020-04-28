@@ -241,27 +241,28 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 		final String beanName = transformedBeanName(name);
 		Object bean;
 
-		// Eagerly check singleton cache for manually registered singletons.
-		// bean可能已经存在了
+		// bean可能已经存在了，那么再这里获取到后就不需要重新创建了
 		Object sharedInstance = getSingleton(beanName);
 		if (sharedInstance != null && args == null) {
+			// 可以获取到的情况
 			if (logger.isDebugEnabled()) {
 				if (isSingletonCurrentlyInCreation(beanName)) {
 					logger.debug("Returning eagerly cached instance of singleton bean '" + beanName +
 							"' that is not fully initialized yet - a consequence of a circular reference");
-				}
-				else {
+				} else {
 					logger.debug("Returning cached instance of singleton bean '" + beanName + "'");
 				}
 			}
-			//获取对象，因为可能是FactoryBean，所以处理一下
+			//获取对象，因为可能获取到的是FactoryBean，所以处理一下
 			bean = getObjectForBeanInstance(sharedInstance, name, beanName, null);
 		}
 
 		else {
-			// Fail if we're already creating this bean instance:
-			// We're assumably within a circular reference.
+			// 没有获取到的情况，说明需要创建对象
+			// 可能会遇到循环引用的情况
+
 			if (isPrototypeCurrentlyInCreation(beanName)) {
+				//prototype bean 并发创建抛出异常
 				throw new BeanCurrentlyInCreationException(beanName);
 			}
 
@@ -269,7 +270,6 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			BeanFactory parentBeanFactory = getParentBeanFactory();
 			if (parentBeanFactory != null && !containsBeanDefinition(beanName)) {
 				//如果当前容器中没有这个bean的定义，而父容器中存在，那就调用父容器的getBean方法返回对象
-				// Not found -> check parent.
 				String nameToLookup = originalBeanName(name);
 				if (args != null) {
 					// Delegation to parent with explicit args.
@@ -286,7 +286,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			}
 
 			try {
-				//又合并了一遍父类的类定义，因为前面合并好的没传进来。。。
+				//合并父类的类定义
 				final RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
 				checkMergedBeanDefinition(mbd, beanName, args);
 
@@ -297,11 +297,13 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					for (String dep : dependsOn) {
 						if (isDependent(beanName, dep)) {
 							//循环依赖的话就直接抛异常了
+							// 所以两个Bean循环依赖是不允许的，很多面试官喜欢问循环依赖怎么处理，其实他们想问的是循环引用怎么处理。。。
 							throw new BeanCreationException(mbd.getResourceDescription(), beanName,
 									"Circular depends-on relationship between '" + beanName + "' and '" + dep + "'");
 						}
 						registerDependentBean(dep, beanName);
 						try {
+							// 递归调用获取依赖的bean
 							getBean(dep);
 						}
 						catch (NoSuchBeanDefinitionException ex) {
@@ -311,8 +313,8 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					}
 				}
 
-				// Create bean instance.
 				if (mbd.isSingleton()) {
+					// 单例bean的创建代码
 					sharedInstance = getSingleton(beanName, new ObjectFactory<Object>() {
 						@Override
 						public Object getObject() throws BeansException {
@@ -334,7 +336,6 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 
 				else if (mbd.isPrototype()) {
 					//如果是prototype，那就每次都要创建对象
-					// It's a prototype -> create a new instance.
 					Object prototypeInstance = null;
 					try {
 						beforePrototypeCreation(beanName);
