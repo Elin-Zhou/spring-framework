@@ -16,21 +16,8 @@
 
 package org.springframework.context.annotation;
 
-import java.beans.PropertyDescriptor;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import org.springframework.aop.framework.autoproxy.AutoProxyUtils;
 import org.springframework.beans.PropertyValues;
 import org.springframework.beans.factory.BeanClassLoaderAware;
@@ -63,6 +50,18 @@ import org.springframework.core.type.classreading.CachingMetadataReaderFactory;
 import org.springframework.core.type.classreading.MetadataReaderFactory;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
+
+import java.beans.PropertyDescriptor;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.springframework.context.annotation.AnnotationConfigUtils.CONFIGURATION_BEAN_NAME_GENERATOR;
 
@@ -214,6 +213,7 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 	 */
 	@Override
 	public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
+		// 为当前的BeanFactory生成一个id，防止同一个BeanFactory被重复处理
 		int registryId = System.identityHashCode(registry);
 		if (this.registriesPostProcessed.contains(registryId)) {
 			throw new IllegalStateException(
@@ -257,7 +257,7 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 	public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
 		List<BeanDefinitionHolder> configCandidates = new ArrayList<BeanDefinitionHolder>();
 		String[] candidateNames = registry.getBeanDefinitionNames();
-
+		// 遍历当前容器中所有的BeanDefinition，从中寻找有@Configuration的类
 		for (String beanName : candidateNames) {
 			BeanDefinition beanDef = registry.getBeanDefinition(beanName);
 			if (ConfigurationClassUtils.isFullConfigurationClass(beanDef) ||
@@ -266,17 +266,18 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 					logger.debug("Bean definition has already been processed as a configuration class: " + beanDef);
 				}
 			}
+			// 判断是否有@Configuration注解，如果有就加入候选列表
 			else if (ConfigurationClassUtils.checkConfigurationClassCandidate(beanDef, this.metadataReaderFactory)) {
 				configCandidates.add(new BeanDefinitionHolder(beanDef, beanName));
 			}
 		}
 
-		// Return immediately if no @Configuration classes were found
+		// 如果候选列表为空，就直接返回了
 		if (configCandidates.isEmpty()) {
 			return;
 		}
 
-		// Sort by previously determined @Order value, if applicable
+		// 如果使用了@Order注解，就排个序
 		Collections.sort(configCandidates, new Comparator<BeanDefinitionHolder>() {
 			@Override
 			public int compare(BeanDefinitionHolder bd1, BeanDefinitionHolder bd2) {
@@ -297,7 +298,8 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 			}
 		}
 
-		// Parse each @Configuration class
+		// 下面开始解析候选列表
+		// 创建一个ConfigurationClassParser，后面的解析将委托给这个对象
 		ConfigurationClassParser parser = new ConfigurationClassParser(
 				this.metadataReaderFactory, this.problemReporter, this.environment,
 				this.resourceLoader, this.componentScanBeanNameGenerator, registry);
@@ -305,23 +307,29 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 		Set<BeanDefinitionHolder> candidates = new LinkedHashSet<BeanDefinitionHolder>(configCandidates);
 		Set<ConfigurationClass> alreadyParsed = new HashSet<ConfigurationClass>(configCandidates.size());
 		do {
+			//开始解析，细讲
 			parser.parse(candidates);
 			parser.validate();
 
-			Set<ConfigurationClass> configClasses = new LinkedHashSet<ConfigurationClass>(parser.getConfigurationClasses());
+			Set<ConfigurationClass> configClasses =
+					new LinkedHashSet<ConfigurationClass>(parser.getConfigurationClasses());
 			configClasses.removeAll(alreadyParsed);
 
-			// Read the model and create bean definitions based on its content
+			// 如果BeanDefinitionReader为空，则创建一个，BeanDefinitionReader是用来加载BeanDefinition
 			if (this.reader == null) {
 				this.reader = new ConfigurationClassBeanDefinitionReader(
 						registry, this.sourceExtractor, this.resourceLoader, this.environment,
 						this.importBeanNameGenerator, parser.getImportRegistry());
 			}
+			// 前面ConfigurationClassParser#parse处理时遗留了三类类型，只将其解析并保存，并没有注册成BeanDefinition，在这个方法中进行处理
+			// 使用BeanDefinitionReader进行加载BeanDefinition，细讲
 			this.reader.loadBeanDefinitions(configClasses);
 			alreadyParsed.addAll(configClasses);
 
 			candidates.clear();
 			if (registry.getBeanDefinitionCount() > candidateNames.length) {
+				// 如果发现当前容器中的BeanDefinition数量比上一轮解析完以后的数量多，说明这一轮解析了新的BeanDefinition
+				// 这种情况需要对BeanDefinition列表逐个判断，如果其类型加了@Configuration注解，那么需要放入候选列表中，进行下一轮解析
 				String[] newCandidateNames = registry.getBeanDefinitionNames();
 				Set<String> oldCandidateNames = new HashSet<String>(Arrays.asList(candidateNames));
 				Set<String> alreadyParsedClasses = new HashSet<String>();

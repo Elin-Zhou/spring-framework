@@ -16,17 +16,8 @@
 
 package org.springframework.context.annotation;
 
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import org.springframework.beans.factory.BeanDefinitionStoreException;
 import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
 import org.springframework.beans.factory.annotation.AnnotatedGenericBeanDefinition;
@@ -51,6 +42,14 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.core.type.AnnotationMetadata;
 import org.springframework.core.type.MethodMetadata;
 import org.springframework.util.StringUtils;
+
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Reads a given fully-populated set of ConfigurationClass instances, registering bean
@@ -113,6 +112,7 @@ class ConfigurationClassBeanDefinitionReader {
 	public void loadBeanDefinitions(Set<ConfigurationClass> configurationModel) {
 		TrackedConditionEvaluator trackedConditionEvaluator = new TrackedConditionEvaluator();
 		for (ConfigurationClass configClass : configurationModel) {
+			// 在遍历一次候选类，加载之前未完成的工作
 			loadBeanDefinitionsForConfigurationClass(configClass, trackedConditionEvaluator);
 		}
 	}
@@ -134,13 +134,16 @@ class ConfigurationClassBeanDefinitionReader {
 		}
 
 		if (configClass.isImported()) {
+			// 如果当前类是被@Import进来的，那么当前类型需要注册成BeanDefinition
 			registerBeanDefinitionForImportedConfigurationClass(configClass);
 		}
+		//依次加载@Bean注解的方法
 		for (BeanMethod beanMethod : configClass.getBeanMethods()) {
 			loadBeanDefinitionsForBeanMethod(beanMethod);
 		}
-
+		// 加载@ImportResource注解对应的资源
 		loadBeanDefinitionsFromImportedResources(configClass.getImportedResources());
+		// 处理通过@Import导入的ImportBeanDefinitionRegistrar类型
 		loadBeanDefinitionsFromRegistrars(configClass.getImportBeanDefinitionRegistrars());
 	}
 
@@ -176,6 +179,7 @@ class ConfigurationClassBeanDefinitionReader {
 		String methodName = metadata.getMethodName();
 
 		// Do we need to mark the bean as skipped by its condition?
+		// 处理@Conditional注解
 		if (this.conditionEvaluator.shouldSkip(metadata, ConfigurationPhase.REGISTER_BEAN)) {
 			configClass.skippedBeanMethods.add(methodName);
 			return;
@@ -184,8 +188,8 @@ class ConfigurationClassBeanDefinitionReader {
 			return;
 		}
 
-		// Consider name and any aliases
 		AnnotationAttributes bean = AnnotationConfigUtils.attributesFor(metadata, Bean.class);
+		// 解析beanName和别名
 		List<String> names = new ArrayList<String>(Arrays.asList(bean.getStringArray("name")));
 		String beanName = (!names.isEmpty() ? names.remove(0) : methodName);
 
@@ -319,19 +323,19 @@ class ConfigurationClassBeanDefinitionReader {
 			String resource = entry.getKey();
 			Class<? extends BeanDefinitionReader> readerClass = entry.getValue();
 
-			// Default reader selection necessary?
+			// 如果没有指定加载器，即使用了默认值BeanDefinitionReader，则根据资源类型选择加载器
 			if (BeanDefinitionReader.class == readerClass) {
 				if (StringUtils.endsWithIgnoreCase(resource, ".groovy")) {
 					// When clearly asking for Groovy, that's what they'll get...
 					readerClass = GroovyBeanDefinitionReader.class;
-				}
-				else {
+				} else {
 					// Primarily ".xml" files but for any other extension as well
 					readerClass = XmlBeanDefinitionReader.class;
 				}
 			}
 
 			BeanDefinitionReader reader = readerInstanceCache.get(readerClass);
+			// BeanDefinition加载器的缓存，避免重复实例化
 			if (reader == null) {
 				try {
 					// Instantiate the specified BeanDefinitionReader
@@ -343,20 +347,21 @@ class ConfigurationClassBeanDefinitionReader {
 						abdr.setEnvironment(this.environment);
 					}
 					readerInstanceCache.put(readerClass, reader);
-				}
-				catch (Throwable ex) {
+				} catch (Throwable ex) {
 					throw new IllegalStateException(
 							"Could not instantiate BeanDefinitionReader class [" + readerClass.getName() + "]");
 				}
 			}
 
 			// TODO SPR-6310: qualify relative path locations as done in AbstractContextLoader.modifyLocations
+			// 调用加载器加载资源
 			reader.loadBeanDefinitions(resource);
 		}
 	}
 
 	private void loadBeanDefinitionsFromRegistrars(Map<ImportBeanDefinitionRegistrar, AnnotationMetadata> registrars) {
 		for (Map.Entry<ImportBeanDefinitionRegistrar, AnnotationMetadata> entry : registrars.entrySet()) {
+			//依次调用ImportBeanDefinitionRegistrar#registerBeanDefinitions，这是Spring的一个扩展点，用来扩展加载BeanDefinition
 			entry.getKey().registerBeanDefinitions(entry.getValue(), this.registry);
 		}
 	}

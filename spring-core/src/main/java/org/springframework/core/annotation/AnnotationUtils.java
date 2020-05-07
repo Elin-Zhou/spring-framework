@@ -16,6 +16,15 @@
 
 package org.springframework.core.annotation;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.springframework.core.BridgeMethodResolver;
+import org.springframework.util.Assert;
+import org.springframework.util.ConcurrentReferenceHashMap;
+import org.springframework.util.ObjectUtils;
+import org.springframework.util.ReflectionUtils;
+import org.springframework.util.StringUtils;
+
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Array;
@@ -32,16 +41,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-
-import org.springframework.core.BridgeMethodResolver;
-import org.springframework.util.Assert;
-import org.springframework.util.ConcurrentReferenceHashMap;
-import org.springframework.util.ObjectUtils;
-import org.springframework.util.ReflectionUtils;
-import org.springframework.util.StringUtils;
 
 /**
  * General utility methods for working with annotations, handling meta-annotations,
@@ -944,13 +943,14 @@ public abstract class AnnotationUtils {
 	 * @see #getAnnotationAttributes(Annotation)
 	 */
 	public static void validateAnnotation(Annotation annotation) {
+		// getAttributeMethods方法用来解析注解中所有获取参数的方法，即不需要参数，返回值不为void的方法
 		for (Method method : getAttributeMethods(annotation.annotationType())) {
 			Class<?> returnType = method.getReturnType();
 			if (returnType == Class.class || returnType == Class[].class) {
 				try {
+					//尝试执行一下，确认是否每个方法都是可以正常执行
 					method.invoke(annotation);
-				}
-				catch (Throwable ex) {
+				} catch (Throwable ex) {
 					throw new IllegalStateException("Could not obtain annotation attribute value for " + method, ex);
 				}
 			}

@@ -130,7 +130,7 @@ public abstract class AbstractRefreshableApplicationContext extends AbstractAppl
 			beanFactory.setSerializationId(getId());
 			//设置beanFactory的两个参数————是否允许Bean覆盖和是否允许循环依赖
 			customizeBeanFactory(beanFactory);
-			//**加载BeanDefinition,由子类实现，有不同的加载方式，如从XML中、注解配置中获取等等
+			//加载BeanDefinition,由子类实现，有不同的加载方式，如从XML中、注解配置中获取等等
 			loadBeanDefinitions(beanFactory);
 			synchronized (this.beanFactoryMonitor) {
 				this.beanFactory = beanFactory;
