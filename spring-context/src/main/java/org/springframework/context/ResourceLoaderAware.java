@@ -59,6 +59,7 @@ import org.springframework.core.io.ResourceLoader;
  * @see org.springframework.core.io.ResourceLoader
  * @see org.springframework.core.io.support.ResourcePatternResolver
  */
+
 public interface ResourceLoaderAware extends Aware {
 
 	/**
